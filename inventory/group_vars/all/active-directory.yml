@@ -1,0 +1,11 @@
+active_directory_ad_domain_name: "sso.doogie.ca"
+active_directory_path: "dc=sso, dc=doogie, dc=ca"
+active_directory_ad_netbios_name: "SSODOOGIE"
+active_directory_ad_safe_mode_password: "FtPX38qhuaHTaTS4CkZ6Fpsgg5wL883N"
+
+
+
+active_directory_groups:
+  - name: Finance
+    ou: "ou=groups,{{ active_directory_path }}"
+

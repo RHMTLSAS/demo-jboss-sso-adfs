@@ -1,0 +1,82 @@
+---
+  - name: Set the VM name
+    set_fact:
+      vm_name: "{{ item }}"
+
+  - name: Create NICs
+    azure_rm_networkinterface:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+      name: "nic{{ vm_name }}"
+      # virtual_network: "vn{{ lab_id }}"
+      virtual_network: "ssonet"
+      # subnet: "sn{{ lab_id }}"
+      subnet: "ssosubnet"
+      ip_configurations:
+      - name: "primary"
+        public_ip_name: "pbi{{vm_name}}"
+        private_ip_address: "{{ ip_addresses[ vm_name] }}"
+        private_ip_allocation_method: "Static"
+        primary: "yes"
+      #security_group: "sg{{ lab_id }}"
+      security_group: "ssosg"
+
+  - name: Create windows VM's
+    azure_rm_virtualmachine:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+      name: "{{ vm_name }}vm"
+      os_type: "Windows"
+      vm_size: "{{ windows_vm_size }}"
+      storage_account: "ssolrs"
+      storage_container: "vms"
+      storage_blob: "{{vm_name}}vm.vhd"
+      admin_username: "{{ username }}"
+      admin_password: "{{ password }}"
+      network_interfaces: "nic{{vm_name}}"
+      image:
+        publisher: "MicrosoftWindowsServer"
+        offer: "WindowsServer"
+        sku: "2012-R2-Datacenter"
+        version: "latest"
+
+  - name: Create the windows extension  
+    azure_rm_virtualmachine_extension:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      name: "vmext{{ vm_name }}"
+      resource_group: "{{ res_group }}"
+      virtual_machine_name: "{{ vm_name }}vm"
+      publisher: Microsoft.Compute
+      virtual_machine_extension_type: CustomScriptExtension
+      type_handler_version: 1.9
+      settings:
+        CommandToExecute: "powershell -ExecutionPolicy Unrestricted -file provision.ps1" 
+        FileUris: [ "https://raw.githubusercontent.com/sperreault/ansible-azure-lab/master/provision.ps1" ]
+    ignore_errors: true
+    
+  # - name: Reset the network interface
+  #   azure_rm_networkinterface:
+  #     client_id: "{{ azure_client_id }}"
+  #     tenant: "{{ azure_tenant }}"
+  #     subscription_id: "{{ azure_subscription_id }}"
+  #     secret: "{{ azure_secret }}"
+  #     resource_group: "{{ res_group }}"
+  #     name: "nic{{vm_name}}"
+  #     virtual_network: "ssonet"
+  #     subnet: "ssosubnet"
+  #     ip_configurations:
+  #     - name: "primary"
+  #       public_ip_name: "pbi{{ vm_name }}}"
+  #       private_ip_address: "{{ ip_addresses[vm_name] }}"
+  #       private_ip_allocation_method: "Static"
+  #       primary: "yes"
+  #     security_group: "ssosg"

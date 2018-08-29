@@ -1,0 +1,24 @@
+
+---
+- name: Delete SSO LAB in Azure
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    res_group: sso
+
+    azure_client_id: "{{ lookup('env', 'AZURE_CLIENT_ID')}}"
+    azure_tenant: "{{ lookup('env', 'AZURE_TENANT')}}"
+    azure_subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID')}}"
+    azure_secret: "{{ lookup('env', 'AZURE_SECRET')}}"
+
+  tasks:
+    - name: Delete Resource Group
+      azure_rm_resourcegroup:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        name: "{{ res_group }}"
+        force: "yes"
+        state: "absent"

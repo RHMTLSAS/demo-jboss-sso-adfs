@@ -1,0 +1,36 @@
+res_group: sso
+res_group_location: "canadacentral"
+storage_class: Standard_LRS
+virtual_network_cidr: 192.168.33.0/24
+username: "ansible"
+password: "Password1!"
+  
+centos_vm_size: Standard_D2_v3
+#windows_vm_size: Standard_D4s_v3
+windows_vm_size: Standard_D2_v3
+
+ip_addresses:
+  ad: "192.168.33.10"
+  adfs: "192.168.33.11"
+  winapp: "192.168.33.12"
+  jbossapp: "192.168.33.13"
+
+sso_dns_domain: "sso.doogie.ca"
+
+windows_groups:
+  - name: Finance
+  - name: Sales
+
+windows_users:
+  - name: "RobertH"
+    firstname: "Robert"
+    lastname: "Hatley"
+    password: "{{ password }}"
+    groups:
+      - Finance
+  - name: "DonaldD"
+    firstname: "Donald"
+    lastname: "Duck"
+    password: "{{ password }}"
+    groups:
+      - Sales

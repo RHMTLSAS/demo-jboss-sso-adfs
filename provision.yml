@@ -1,0 +1,240 @@
+---
+- name: Create Azure Ansible Lab
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars: 
+    azure_client_id: "{{ lookup('env', 'AZURE_CLIENT_ID')}}"
+    azure_tenant: "{{ lookup('env', 'AZURE_TENANT')}}"
+    azure_subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID')}}"
+    azure_secret: "{{ lookup('env', 'AZURE_SECRET')}}"
+    ansible_python_interpreter: "{{ lookup('env', 'PYTHON_EXEC')}}"
+
+  pre_tasks:
+    - name: Do we have our Azure Credentials
+      assert:
+        { that: "{{ item}} != ''" }
+      with_items:
+        - azure_client_id
+        - azure_tenant
+        - azure_subscription_id
+        - azure_secret 
+        
+  tasks:
+#
+# Generic tasks to bring the environment
+#
+
+    - name: create ressource group 
+      azure_rm_resourcegroup:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        name: "{{ res_group }}"
+        location: "{{ res_group_location }}" 
+        
+    - name: Create storage account
+      azure_rm_storageaccount:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        resource_group: "{{ res_group }}"
+        name: "ssolrs"
+        account_type: "{{ storage_class }}"
+      tags:
+        - prep-storage
+
+    - name: Create virtual network
+      azure_rm_virtualnetwork:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        resource_group: "{{ res_group }}"
+        name: "ssonet"
+        address_prefixes: "{{virtual_network_cidr}}"
+      tags:
+        - prep-network
+
+    - name: Add subnet
+      azure_rm_subnet:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        resource_group: "{{ res_group }}"
+        name: "ssosubnet"
+        address_prefix: "{{virtual_network_cidr}}"
+        virtual_network: "ssonet"
+      tags:
+        - prep-network
+
+    - name: Create 4 public ip adresses
+      azure_rm_publicipaddress:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        resource_group: "{{ res_group }}"
+        allocation_method: Static
+        name: "{{ 'pbi%s' | format(item) }}"
+      loop: 
+        - "ad" 
+        - "adfs"
+        - "winapp"
+        - "jbossapp"
+      tags:
+        - prep-network
+
+    - name: Create the DNS zone
+      azure_rm_dnszone:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        resource_group: "{{ res_group }}"
+        name: "{{ sso_dns_domain }}"
+      tags:
+        - prep-network
+    
+    - name: Get public addesses
+      azure_rm_publicipaddress_facts:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        resource_group: "{{ res_group }}"
+      register: sso_lab_publicips
+      tags:
+        - prep-network
+
+    - name: Create DNS Entries
+      azure_rm_dnsrecordset:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        resource_group: "{{ res_group }}"
+        record_mode: "purge"
+        record_type: "A"
+        relative_name: "{{ item.name | replace('pbi','') }}"
+        zone_name: "{{ sso_dns_domain }}"
+        records:
+          - entry: "{{ item.properties.ipAddress }}"
+      loop: "{{ sso_lab_publicips.ansible_facts.azure_publicipaddresses }}"
+      tags:
+        - prep-network
+
+    - name: Create security group that allows incoming traffic on SSH/HTTP/HTTPS/RDP/WINRM
+      azure_rm_securitygroup:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        resource_group: "{{ res_group }}"
+        name: "ssosg"
+        rules:
+          - name: SSH
+            protocol: Tcp
+            destination_port_range: 22
+            access: Allow
+            priority: 101
+            direction: Inbound
+          - name: RDP
+            protocol: Tcp
+            destination_port_range: 3389
+            access: Allow
+            priority: 102
+            direction: Inbound
+          - name: HTTP
+            protocol: Tcp
+            destination_port_range: 80
+            access: Allow
+            priority: 103
+            direction: Inbound
+          - name: HTTPS
+            protocol: Tcp
+            destination_port_range: 443
+            access: Allow
+            priority: 104
+            direction: Inbound
+          - name: WINRM
+            protocol: Tcp
+            destination_port_range: 5985
+            access: Allow
+            priority: 105
+            direction: Inbound
+      tags:
+        - prep-network
+    
+    - name: Create Windows VM's
+      include_tasks: create_windows_machine.yml
+      with_items:
+        - "ad" 
+        - "adfs"
+        # - "winapp"
+        # - "jbossapp"
+
+    - name: Refresh the inventory
+      meta: refresh_inventory
+
+- name: Setup AD
+  hosts: "advm" 
+  roles:
+    - active-directory
+
+  pre_tasks:
+    - name: Change administrator password
+      win_user:
+        name: "administrator"
+        password: "{{ password }}"
+
+  tasks:
+    - name: Create Windows Groups
+      win_domain_group:
+          name: "{{ item.name }}"
+          scope: "domainlocal"
+          state: present
+      loop: "{{ windows_groups }}"
+
+  
+    - name: Create Windows Users
+      win_domain_user:
+        name: "{{ item.name }}"
+        firstname: "{{ item.firstname }}"
+        surname: "{{ item.lastname }}"
+        password: "{{ item.password }}"
+        groups: "{{ item.groups }}"
+        state: "present"
+      loop: "{{ windows_users }}"
+
+    - name: Upload GSMA Setup powershell
+      win_template:
+          src: "advm/adfs_gsma_setup.ps1.j2" # required. Path of a Jinja2 formatted template on the local server. This can be a relative or absolute path.
+          dest: 'c:\adfs_gsma_setup.ps1' # required. Location to render the template to on the remote machine.
+          force: yes # not required. If C(yes), will replace the remote file when contents are different from the source.,If C(no), the file will only be transferred if the destination does not exist.
+      register: result_upload_gsma_setup_ps1
+    - name: Execute GSMA Setup powershell
+      win_shell:  'c:\adfs_gsma_setup.ps1'
+      when: result_upload_gsma_setup_ps1 is changed
+
+
+- name: Setup ADFS
+  hosts: "adfsvm" 
+ 
+  pre_tasks:
+    - name: Register machine to domain
+      win_domain_membership:
+        dns_domain_name: "{{ sso_dns_domain }}"
+        hostname: "{{ inventory_hostname }}"
+        domain_admin_user: "administrator@{{ sso_dns_domain }}"
+        domain_admin_password: "{{ password }}"
+        domain_ou_path: "OU=Servers,{{ active_directory_path }}"
+        state: domain
+      register: domain_state
+
+    - name: Reboot if required
+      win_reboot:
+      when: domain_state.reboot_required is True
