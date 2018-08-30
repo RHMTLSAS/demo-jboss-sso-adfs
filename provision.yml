@@ -19,7 +19,7 @@
         - azure_tenant
         - azure_subscription_id
         - azure_secret 
-        
+
   tasks:
 #
 # Generic tasks to bring the environment
@@ -110,7 +110,7 @@
       tags:
         - prep-network
 
-    - name: Create DNS Entries
+    - name: Create external DNS entries
       azure_rm_dnsrecordset:
         client_id: "{{ azure_client_id }}"
         tenant: "{{ azure_tenant }}"
@@ -119,7 +119,7 @@
         resource_group: "{{ res_group }}"
         record_mode: "purge"
         record_type: "A"
-        relative_name: "{{ item.name | replace('pbi','') }}"
+        relative_name: "{{ item.name | replace('pbi','') }}"  
         zone_name: "{{ sso_dns_domain }}"
         records:
           - entry: "{{ item.properties.ipAddress }}"
@@ -127,6 +127,80 @@
       tags:
         - prep-network
 
+    - name: Create enterpriseregistration CNAME to adfs
+      azure_rm_dnsrecordset:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        resource_group: "{{ res_group }}"
+        record_mode: "purge"
+        record_type: "CNAME"
+        relative_name: "enterpriseregistration"
+        zone_name: "{{ sso_dns_domain }}"
+        records:
+          - entry: "adfs.{{ sso_dns_domain }}"
+      tags:
+        - prep-network
+
+    - name: Make sure we have an account on letsencrypt
+      acme_account:
+        account_key_src: "{{ letsencrypt_account_key_src }}"
+        state: present
+        acme_directory: "{{ letsencrypt_acme_directory }}"
+        terms_agreed: yes 
+        acme_version: 2
+      register: acme_account_return
+      tags:
+        - acme
+        
+    - name: Create adfs ACME Certificate phase1
+      acme_certificate:
+        account_key: "{{ letsencrypt_account_key_src }}"
+        acme_directory: "{{ letsencrypt_acme_directory }}"
+        acme_version: 2
+        challenge: "dns-01"
+        csr: "{{ letsencrypt_adfs_csr_src }}"
+        dest: "{{ letsencrypt_adfs_crt_src }}"
+      register: adfs_acme_cert_phase1
+      tags:
+        - acme
+
+    - name: Execute the challenge logic if phase1 is changed
+      block:
+        - set_fact:
+            challenge_data_dns: "{{ adfs_acme_cert_phase1 | json_query('challenge_data_dns') | replace('.sso.doogie.ca','') }}"
+        - azure_rm_dnsrecordset:
+            client_id: "{{ azure_client_id }}"
+            tenant: "{{ azure_tenant }}"
+            subscription_id: "{{ azure_subscription_id }}"
+            secret: "{{ azure_secret }}"
+            resource_group: "{{ res_group }}"
+            record_mode: "purge"
+            record_type: "TXT"
+            relative_name: "{{ item.key }}"
+            zone_name: "{{ sso_dns_domain }}"
+            records:
+              - entry: "{{ item.value[0] }}"
+          loop: "{{ query('dict', challenge_data_dns) }}"  
+        - acme_certificate:
+            account_key: "{{ letsencrypt_account_key_src }}"
+            acme_directory: "{{ letsencrypt_acme_directory }}"
+            acme_version: 2
+            challenge: "dns-01"
+            dest: "{{ letsencrypt_adfs_crt_src }}"
+            csr: "{{ letsencrypt_adfs_csr_src }}"
+            fullchain_dest: "{{ letsencrypt_adfs_fullchain_src }}"
+            chain_dest: "{{ letsencrypt_adfs_chain_src }}"
+            data: "{{ adfs_acme_cert_phase1 }}"
+        - shell: "openssl pkcs12 -export -out {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_pfx_src }} -inkey {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_key_src }} -in {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_crt_src }} -certfile {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_chain_src }} -passout pass:"
+      rescue:
+        - debug:
+            msg="Certificate already generated, skipping"
+      when: adfs_acme_cert_phase1.changed
+      tags:
+        - acme
+      
     - name: Create security group that allows incoming traffic on SSH/HTTP/HTTPS/RDP/WINRM
       azure_rm_securitygroup:
         client_id: "{{ azure_client_id }}"
@@ -180,6 +254,7 @@
     - name: Refresh the inventory
       meta: refresh_inventory
 
+
 - name: Setup AD
   hosts: "advm" 
   roles:
@@ -220,21 +295,54 @@
       win_shell:  'c:\adfs_gsma_setup.ps1'
       when: result_upload_gsma_setup_ps1 is changed
 
+# - name: Update the virtual network by using the advm
+#   hosts: localhost
+#   connection: local
+#   gather_facts: false
+  
+#   vars: 
+#     azure_client_id: "{{ lookup('env', 'AZURE_CLIENT_ID')}}"
+#     azure_tenant: "{{ lookup('env', 'AZURE_TENANT')}}"
+#     azure_subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID')}}"
+#     azure_secret: "{{ lookup('env', 'AZURE_SECRET')}}"
+#     ansible_python_interpreter: "{{ lookup('env', 'PYTHON_EXEC')}}"
+    
+#   tasks:
+#     - name: Update the vn
+#       azure_rm_virtualnetwork:
+#         client_id: "{{ azure_client_id }}"
+#         tenant: "{{ azure_tenant }}"
+#         subscription_id: "{{ azure_subscription_id }}"
+#         secret: "{{ azure_secret }}"
+#         resource_group: "{{ res_group }}"
+#         name: "ssonet"
+#         address_prefixes: "{{virtual_network_cidr}}"
+#         dns_servers: 
+#           - "192.168.33.10"
 
 - name: Setup ADFS
   hosts: "adfsvm" 
  
   pre_tasks:
+    - name: Renew dhcp to take advantage of the new dns
+      win_command: "ipconfig /renew"
+      
     - name: Register machine to domain
       win_domain_membership:
         dns_domain_name: "{{ sso_dns_domain }}"
         hostname: "{{ inventory_hostname }}"
         domain_admin_user: "administrator@{{ sso_dns_domain }}"
         domain_admin_password: "{{ password }}"
-        domain_ou_path: "OU=Servers,{{ active_directory_path }}"
         state: domain
       register: domain_state
 
     - name: Reboot if required
       win_reboot:
-      when: domain_state.reboot_required is True
+      when: domain_state.reboot_required
+
+    - name: Install AD-Domain-Services feature
+      win_feature:
+        name: ADFS-Federation
+        include_management_tools: yes
+        include_sub_features: yes
+        state: present

@@ -18,7 +18,7 @@ ip_addresses:
 sso_dns_domain: "sso.doogie.ca"
 
 windows_groups:
-  - name: Finance
+  - name: Finance 
   - name: Sales
 
 windows_users:
@@ -34,3 +34,14 @@ windows_users:
     password: "{{ password }}"
     groups:
       - Sales
+
+letsencrypt_acme_directory: "https://acme-staging-v02.api.letsencrypt.org/directory"
+#letsencrypt_acme_directory: "https://acme-v02.api.letsencrypt.org/directory"
+letsencrypt_account_key_src: "files/letsencrypt/account.key"
+letsencrypt_dh_params_src: "files/letsencrypt/dhparams.out"
+letsencrypt_adfs_key_src: "files/letsencrypt/adfs.key"
+letsencrypt_adfs_csr_src: "files/letsencrypt/adfs.csr"
+letsencrypt_adfs_crt_src: "files/letsencrypt/adfs.crt"
+letsencrypt_adfs_pfx_src: "files/letsencrypt/adfs.pfx"
+letsencrypt_adfs_fullchain_src: "files/letsencrypt/adfs_fullchain.crt"
+letsencrypt_adfs_chain_src: "files/letsencrypt/adfs_intermediate.crt"

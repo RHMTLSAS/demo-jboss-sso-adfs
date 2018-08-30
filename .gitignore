@@ -2,3 +2,6 @@
 .swp
 facts/*
 roles/*
+files/letsencrypt/*.key
+files/letsencrypt/*.crt
+files/letsencrypt/*.pfx
