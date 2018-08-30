@@ -1,0 +1,15 @@
+#!powershell
+#
+# Windows PowerShell script for AD FS Deployment
+#
+certutil.exe `
+-privatekey `
+-importPFX adfs.{{ sso_dns_domain }} c:\adfs.pfx `
+NoExport-Module ADFS
+
+
+Install-AdfsFarm `
+-CertificateThumbprint:"D653886263BBCADA3A2E7A9885E3AD251DAE5022" `
+-FederationServiceDisplayName:"SSO Doogie" `
+-FederationServiceName:"adfs.sso.doogie.ca" `
+-GroupServiceAccountIdentifier:"SSODOOGIE\FsGmsa`$"
