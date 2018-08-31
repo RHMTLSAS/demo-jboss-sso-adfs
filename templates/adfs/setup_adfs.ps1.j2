@@ -2,14 +2,19 @@
 #
 # Windows PowerShell script for AD FS Deployment
 #
-certutil.exe `
+
+# View: http://valdemar.lemche.net/2015/03/installing-and-configuring-adfs-30.html
+
+certutil `
 -privatekey `
--importPFX adfs.{{ sso_dns_domain }} c:\adfs.pfx `
+-importPFX adfs.{{ sso_dns_domain }} {{ letsencrypt_adfs_pfx_dest }} `
 NoExport-Module ADFS
+
+$certutilObjectList = Get-CertutilObjectList (Invoke-Expression "$certutil -store adfs.{{ sso_dns_domain }}" )
 
 
 Install-AdfsFarm `
--CertificateThumbprint:"D653886263BBCADA3A2E7A9885E3AD251DAE5022" `
--FederationServiceDisplayName:"SSO Doogie" `
--FederationServiceName:"adfs.sso.doogie.ca" `
--GroupServiceAccountIdentifier:"SSODOOGIE\FsGmsa`$"
+# -CertificateThumbprint:"D653886263BBCADA3A2E7A9885E3AD251DAE5022" `
+# -FederationServiceDisplayName:"{{ adfs_federation_display_name }}" `
+# -FederationServiceName:"adfs.{{ sso_dns_domain }}" `
+# -GroupServiceAccountIdentifier:"{{ active_directory_ad_netbios_name }}\{{ adfs_service_account_name }}`$"

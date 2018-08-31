@@ -1,0 +1,48 @@
+---
+  - name: Set the VM name
+    set_fact:
+      vm_name: "{{ item }}"
+
+  - name: Create NICs
+    azure_rm_networkinterface:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+      name: "nic{{ vm_name }}"
+      virtual_network: "ssonet"
+      subnet: "ssosubnet"
+      ip_configurations:
+      - name: "primary"
+        public_ip_name: "pbi{{vm_name}}"
+        private_ip_address: "{{ ip_addresses[ vm_name] }}"
+        private_ip_allocation_method: "Static"
+        primary: "yes"
+      #security_group: "sg{{ lab_id }}"
+      security_group: "ssosg"
+
+  - name: Create RHEL VM's
+    azure_rm_virtualmachine:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+      name: "{{ vm_name }}vm"
+      vm_size: "{{ rhel_vm_size }}"
+      managed_disk_type: "{{ storage_class }}"
+      storage_account: "ssolrs"
+      storage_container: "vms"
+      storage_blob: "{{vm_name}}vm.vhd"
+      admin_username: "{{ username }}"
+      admin_password: "{{ password }}"
+      network_interfaces: "nic{{vm_name}}"
+      image:
+        offer: "RHEL"
+        publisher: "REDHAT"
+        sku: '7.4'
+        version: latest
+      ssh_public_keys: 
+        - path: /home/{{ username }}/.ssh/authorized_keys
+          key_data: "{{ lookup('file', 'files/insecure.pub') }}"

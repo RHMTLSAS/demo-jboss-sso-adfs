@@ -5,7 +5,7 @@ virtual_network_cidr: 192.168.33.0/24
 username: "ansible"
 password: "Password1!"
   
-centos_vm_size: Standard_D2_v3
+rhel_vm_size: Standard_D2_v3
 #windows_vm_size: Standard_D4s_v3
 windows_vm_size: Standard_D2_v3
 
@@ -13,7 +13,7 @@ ip_addresses:
   ad: "192.168.33.10"
   adfs: "192.168.33.11"
   winapp: "192.168.33.12"
-  jbossapp: "192.168.33.13"
+  rhsso: "192.168.33.13"
 
 sso_dns_domain: "sso.doogie.ca"
 
@@ -41,6 +41,12 @@ windows_users:
     groups:
       - "Domain Admins"
 
+adfs_base_directory: "c:\\adfs"
+adfs_setup_powershell_src: "templates/adfs/setup_adfs.ps1.j2"
+adfs_setup_powershell_dest: "{{ adfs_base_directory }}\\setup_adfs.ps1"
+adfs_federation_display_name: "Doogie SSO"
+adfs_service_account_name: "FsGmsa"
+
 letsencrypt_acme_directory: "https://acme-staging-v02.api.letsencrypt.org/directory"
 #letsencrypt_acme_directory: "https://acme-v02.api.letsencrypt.org/directory"
 letsencrypt_account_key_src: "files/letsencrypt/account.key"
@@ -49,6 +55,13 @@ letsencrypt_adfs_key_src: "files/letsencrypt/adfs.key"
 letsencrypt_adfs_csr_src: "files/letsencrypt/adfs.csr"
 letsencrypt_adfs_crt_src: "files/letsencrypt/adfs.crt"
 letsencrypt_adfs_pfx_src: "files/letsencrypt/adfs.pfx"
-letsencrypt_adfs_pfx_dest: "c:\\adfs.pfx"
+letsencrypt_adfs_pfx_dest: "{{ adfs_base_directory }}\\adfs.pfx"
 letsencrypt_adfs_fullchain_src: "files/letsencrypt/adfs_fullchain.crt"
 letsencrypt_adfs_chain_src: "files/letsencrypt/adfs_intermediate.crt"
+
+
+winapp_site_directory: "c:\\sites"
+winapp_app_pool: winapp
+winapp_site_name: winapp
+winapp_site_hostname: winapp.sso.doogie.ca
+winapp_dest: "{{ winapp_site_directory }}\\winapp"
