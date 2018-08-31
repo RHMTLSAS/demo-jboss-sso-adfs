@@ -2,6 +2,7 @@
 .swp
 facts/*
 roles/*
+!roles/requirements.yml
 files/letsencrypt/*.key
 files/letsencrypt/*.crt
 files/letsencrypt/*.pfx
