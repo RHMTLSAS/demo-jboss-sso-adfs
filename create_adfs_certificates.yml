@@ -1,0 +1,46 @@
+- name: Create adfs ACME Certificate phase1
+  acme_certificate:
+    account_key: "{{ letsencrypt_account_key_src }}"
+    acme_directory: "{{ letsencrypt_acme_directory }}"
+    acme_version: 2
+    challenge: "dns-01"
+    csr: "{{ letsencrypt_adfs_csr_src }}"
+    dest: "{{ letsencrypt_adfs_crt_src }}"
+  register: adfs_acme_cert_phase1
+  tags:
+    - create-adfs-certificates
+
+- name: Execute the challenge logic if phase1 is changed
+  block:
+    - set_fact:
+        challenge_data_dns: "{{ adfs_acme_cert_phase1 | json_query('challenge_data_dns') | replace('.sso.doogie.ca','') }}"
+    - azure_rm_dnsrecordset:
+        client_id: "{{ azure_client_id }}"
+        tenant: "{{ azure_tenant }}"
+        subscription_id: "{{ azure_subscription_id }}"
+        secret: "{{ azure_secret }}"
+        resource_group: "{{ res_group }}"
+        record_mode: "purge"
+        record_type: "TXT"
+        relative_name: "{{ item.key }}"
+        zone_name: "{{ sso_dns_domain }}"
+        records:
+          - entry: "{{ item.value[0] }}"
+      loop: "{{ query('dict', challenge_data_dns) }}"  
+    - acme_certificate:
+        account_key: "{{ letsencrypt_account_key_src }}"
+        acme_directory: "{{ letsencrypt_acme_directory }}"
+        acme_version: 2
+        challenge: "dns-01"
+        dest: "{{ letsencrypt_adfs_crt_src }}"
+        csr: "{{ letsencrypt_adfs_csr_src }}"
+        fullchain_dest: "{{ letsencrypt_adfs_fullchain_src }}"
+        chain_dest: "{{ letsencrypt_adfs_chain_src }}"
+        data: "{{ adfs_acme_cert_phase1 }}"
+    - shell: "openssl pkcs12 -export -out {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_pfx_src }} -inkey {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_key_src }} -in {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_crt_src }} -certfile {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_chain_src }} -passout pass:"
+  rescue:
+    - debug:
+        msg="Certificate already generated, skipping"
+  when: adfs_acme_cert_phase1.changed
+  tags:
+    - create-adfs-certificates

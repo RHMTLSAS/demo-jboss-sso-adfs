@@ -5,9 +5,31 @@ virtual_network_cidr: 192.168.33.0/24
 username: "ansible"
 password: "Password1!"
   
-rhel_vm_size: Standard_D2_v3
+default_rhel_vm_size: Standard_D2_v3
 #windows_vm_size: Standard_D4s_v3
-windows_vm_size: Standard_D2_v3
+default_windows_vm_size: Standard_D2_v3
+
+demo_jboss_sso_adfs_environment:
+  - name: ad
+    machinename: "advm"
+    internal_ip_address: "192.168.33.10"
+    public_ip: true
+    vm_size: "{{ default_windows_vm_size }}"
+  - name: adfs
+    machinename: "adfsvm"
+    internal_ip_address: "192.168.33.11"
+    public_ip: true
+    vm_size: "{{ default_windows_vm_size }}"
+  - name: winapp
+    machinename: "winappvm"
+    internal_ip_address: "192.168.33.12"
+    public_ip: true
+    vm_size: "{{ default_windows_vm_size }}"
+  - name: rhsso
+    machinename: "rhssovm"
+    public_ip: true
+    internal_ip_address: "192.168.33.13"
+    vm_size: "{{ default_rhel_vm_size }}"
 
 ip_addresses:
   ad: "192.168.33.10"
@@ -51,6 +73,7 @@ letsencrypt_acme_directory: "https://acme-staging-v02.api.letsencrypt.org/direct
 #letsencrypt_acme_directory: "https://acme-v02.api.letsencrypt.org/directory"
 letsencrypt_account_key_src: "files/letsencrypt/account.key"
 letsencrypt_dh_params_src: "files/letsencrypt/dhparams.out"
+
 letsencrypt_adfs_key_src: "files/letsencrypt/adfs.key"
 letsencrypt_adfs_csr_src: "files/letsencrypt/adfs.csr"
 letsencrypt_adfs_crt_src: "files/letsencrypt/adfs.crt"
@@ -59,6 +82,13 @@ letsencrypt_adfs_pfx_dest: "{{ adfs_base_directory }}\\adfs.pfx"
 letsencrypt_adfs_fullchain_src: "files/letsencrypt/adfs_fullchain.crt"
 letsencrypt_adfs_chain_src: "files/letsencrypt/adfs_intermediate.crt"
 
+letsencrypt_rhsso_key_src: "files/letsencrypt/rhsso.key"
+letsencrypt_rhsso_csr_src: "files/letsencrypt/rhsso.csr"
+letsencrypt_rhsso_crt_src: "files/letsencrypt/rhsso.crt"
+letsencrypt_rhsso_pfx_src: "files/letsencrypt/rhsso.pfx"
+letsencrypt_rhsso_pfx_dest: "/etc/pki/rhsso.crt"
+letsencrypt_rhsso_fullchain_src: "files/letsencrypt/rhsso_fullchain.crt"
+letsencrypt_rhsso_chain_src: "files/letsencrypt/rhsso_intermediate.crt"
 
 winapp_site_directory: "c:\\sites"
 winapp_app_pool: winapp

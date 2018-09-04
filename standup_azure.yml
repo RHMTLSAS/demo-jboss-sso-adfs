@@ -1,0 +1,148 @@
+#
+# Generic tasks to bring the environment
+#
+---
+  - name: create ressource group 
+    azure_rm_resourcegroup:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      name: "{{ res_group }}"
+      location: "{{ res_group_location }}" 
+    tags:
+      - standup-azure
+      
+  - name: Create storage account
+    azure_rm_storageaccount:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+      name: "ssolrs"
+      account_type: "{{ storage_class }}"
+    tags:
+      - standup-azure
+
+  - name: Create virtual network
+    azure_rm_virtualnetwork:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+      name: "ssonet"
+      address_prefixes: "{{virtual_network_cidr}}"
+    tags:
+      - standup-azure
+
+  - name: Add subnet
+    azure_rm_subnet:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+      name: "ssosubnet"
+      address_prefix: "{{virtual_network_cidr}}"
+      virtual_network: "ssonet"
+    tags:
+      - standup-azure
+
+  - name: Create 4 public ip adresses
+    azure_rm_publicipaddress:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+      allocation_method: Static
+      name: "{{ 'pbi%s' | format(item.name) }}"
+    loop: '{{ demo_jboss_sso_adfs_environment | json_query("[?public_ip==`true`]") }}'
+    tags:
+      - standup-azure
+
+  - name: Create the DNS zone
+    azure_rm_dnszone:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+      name: "{{ sso_dns_domain }}"
+    tags:
+      - standup-azure
+
+  - name: Get public addesses
+    azure_rm_publicipaddress_facts:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+    register: sso_lab_publicips
+    tags:
+      - standup-azure
+
+  - name: Create external DNS entries
+    azure_rm_dnsrecordset:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+      record_mode: "purge"
+      record_type: "A"
+      relative_name: "{{ item.name | replace('pbi','') }}"  
+      zone_name: "{{ sso_dns_domain }}"
+      records:
+        - entry: "{{ item.properties.ipAddress }}"
+    loop: "{{ sso_lab_publicips.ansible_facts.azure_publicipaddresses }}"
+    tags:
+      - standup-azure
+
+
+
+
+  - name: Create security group that allows incoming traffic on SSH/HTTP/HTTPS/RDP/WINRM
+    azure_rm_securitygroup:
+      client_id: "{{ azure_client_id }}"
+      tenant: "{{ azure_tenant }}"
+      subscription_id: "{{ azure_subscription_id }}"
+      secret: "{{ azure_secret }}"
+      resource_group: "{{ res_group }}"
+      name: "ssosg"
+      rules:
+        - name: SSH
+          protocol: Tcp
+          destination_port_range: 22
+          access: Allow
+          priority: 101
+          direction: Inbound
+        - name: RDP
+          protocol: Tcp
+          destination_port_range: 3389
+          access: Allow
+          priority: 102
+          direction: Inbound
+        - name: HTTP
+          protocol: Tcp
+          destination_port_range: 80
+          access: Allow
+          priority: 103
+          direction: Inbound
+        - name: HTTPS
+          protocol: Tcp
+          destination_port_range: 443
+          access: Allow
+          priority: 104
+          direction: Inbound
+        - name: WINRM
+          protocol: Tcp
+          destination_port_range: 5985
+          access: Allow
+          priority: 105
+          direction: Inbound
+      tags:
+        - standup-azure

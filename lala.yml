@@ -1,0 +1,18 @@
+---
+- name: Create Azure Ansible Lab
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars: 
+    azure_client_id: "{{ lookup('env', 'AZURE_CLIENT_ID')}}"
+    azure_tenant: "{{ lookup('env', 'AZURE_TENANT')}}"
+    azure_subscription_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID')}}"
+    azure_secret: "{{ lookup('env', 'AZURE_SECRET')}}"
+    ansible_python_interpreter: "{{ lookup('env', 'PYTHON_EXEC')}}"
+  tasks:
+    - name: lala
+      debug:
+        msg: '{{ demo_jboss_sso_adfs_environment | json_query("[cname_entry]")}}'
+    - name: lala
+      debug:
+        msg: '{{ demo_jboss_sso_adfs_environment | json_query("*[cname_entry]")}}'

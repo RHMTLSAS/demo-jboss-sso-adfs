@@ -21,113 +21,11 @@
         - azure_secret 
 
   tasks:
-#
-# Generic tasks to bring the environment
-#
-
-    - name: create ressource group 
-      azure_rm_resourcegroup:
-        client_id: "{{ azure_client_id }}"
-        tenant: "{{ azure_tenant }}"
-        subscription_id: "{{ azure_subscription_id }}"
-        secret: "{{ azure_secret }}"
-        name: "{{ res_group }}"
-        location: "{{ res_group_location }}" 
-        
-    - name: Create storage account
-      azure_rm_storageaccount:
-        client_id: "{{ azure_client_id }}"
-        tenant: "{{ azure_tenant }}"
-        subscription_id: "{{ azure_subscription_id }}"
-        secret: "{{ azure_secret }}"
-        resource_group: "{{ res_group }}"
-        name: "ssolrs"
-        account_type: "{{ storage_class }}"
+    - name: Standup Azure
+      include_tasks: standup_azure.yml
       tags:
-        - prep-storage
-
-    - name: Create virtual network
-      azure_rm_virtualnetwork:
-        client_id: "{{ azure_client_id }}"
-        tenant: "{{ azure_tenant }}"
-        subscription_id: "{{ azure_subscription_id }}"
-        secret: "{{ azure_secret }}"
-        resource_group: "{{ res_group }}"
-        name: "ssonet"
-        address_prefixes: "{{virtual_network_cidr}}"
-      tags:
-        - prep-network
-
-    - name: Add subnet
-      azure_rm_subnet:
-        client_id: "{{ azure_client_id }}"
-        tenant: "{{ azure_tenant }}"
-        subscription_id: "{{ azure_subscription_id }}"
-        secret: "{{ azure_secret }}"
-        resource_group: "{{ res_group }}"
-        name: "ssosubnet"
-        address_prefix: "{{virtual_network_cidr}}"
-        virtual_network: "ssonet"
-      tags:
-        - prep-network
-
-    - name: Create 4 public ip adresses
-      azure_rm_publicipaddress:
-        client_id: "{{ azure_client_id }}"
-        tenant: "{{ azure_tenant }}"
-        subscription_id: "{{ azure_subscription_id }}"
-        secret: "{{ azure_secret }}"
-        resource_group: "{{ res_group }}"
-        allocation_method: Static
-        name: "{{ 'pbi%s' | format(item) }}"
-      loop: 
-        - "ad" 
-        - "adfs"
-        - "winapp"
-        - "rhsso"
-      tags:
-        - prep-network
-
-    - name: Create the DNS zone
-      azure_rm_dnszone:
-        client_id: "{{ azure_client_id }}"
-        tenant: "{{ azure_tenant }}"
-        subscription_id: "{{ azure_subscription_id }}"
-        secret: "{{ azure_secret }}"
-        resource_group: "{{ res_group }}"
-        name: "{{ sso_dns_domain }}"
-      tags:
-        - prep-network
-    
-    - name: Get public addesses
-      azure_rm_publicipaddress_facts:
-        client_id: "{{ azure_client_id }}"
-        tenant: "{{ azure_tenant }}"
-        subscription_id: "{{ azure_subscription_id }}"
-        secret: "{{ azure_secret }}"
-        resource_group: "{{ res_group }}"
-      register: sso_lab_publicips
-      tags:
-        - prep-network
-
-    - name: Create external DNS entries
-      azure_rm_dnsrecordset:
-        client_id: "{{ azure_client_id }}"
-        tenant: "{{ azure_tenant }}"
-        subscription_id: "{{ azure_subscription_id }}"
-        secret: "{{ azure_secret }}"
-        resource_group: "{{ res_group }}"
-        record_mode: "purge"
-        record_type: "A"
-        relative_name: "{{ item.name | replace('pbi','') }}"  
-        zone_name: "{{ sso_dns_domain }}"
-        records:
-          - entry: "{{ item.properties.ipAddress }}"
-      loop: "{{ sso_lab_publicips.ansible_facts.azure_publicipaddresses }}"
-      tags:
-        - prep-network
-
-    - name: Create enterpriseregistration CNAME to adfs
+        - standup-azure
+    - name: Create CNAME entry for enterpriseregistration
       azure_rm_dnsrecordset:
         client_id: "{{ azure_client_id }}"
         tenant: "{{ azure_tenant }}"
@@ -141,12 +39,12 @@
         records:
           - entry: "adfs.{{ sso_dns_domain }}"
       tags:
-        - prep-network
-
-    - name: Create account keys
+        - standup-azure
+   
+    - name: Create keys and csr
       shell: "{{ hostvars[inventory_hostname].playbook_dir }}/files/letsencrypt/gen_keys_csrs.sh chdir={{ hostvars[inventory_hostname].playbook_dir }}/files/letsencrypt"
       tags:
-        - acme
+        - prep-certificate
 
     - name: Make sure we have an account on letsencrypt
       acme_account:
@@ -157,108 +55,30 @@
         acme_version: 2
       register: acme_account_return
       tags:
-        - acme
+        - prep-certificate
         
-    - name: Create adfs ACME Certificate phase1
-      acme_certificate:
-        account_key: "{{ letsencrypt_account_key_src }}"
-        acme_directory: "{{ letsencrypt_acme_directory }}"
-        acme_version: 2
-        challenge: "dns-01"
-        csr: "{{ letsencrypt_adfs_csr_src }}"
-        dest: "{{ letsencrypt_adfs_crt_src }}"
-      register: adfs_acme_cert_phase1
+    - name: Register certificates with let's encrypt
+      include_tasks: "{{ item }}"
+      with_items:
+        - "create_adfs_certificates.yml" 
+        - "create_rhsso_certificates.yml"
       tags:
-        - acme
-
-    - name: Execute the challenge logic if phase1 is changed
-      block:
-        - set_fact:
-            challenge_data_dns: "{{ adfs_acme_cert_phase1 | json_query('challenge_data_dns') | replace('.sso.doogie.ca','') }}"
-        - azure_rm_dnsrecordset:
-            client_id: "{{ azure_client_id }}"
-            tenant: "{{ azure_tenant }}"
-            subscription_id: "{{ azure_subscription_id }}"
-            secret: "{{ azure_secret }}"
-            resource_group: "{{ res_group }}"
-            record_mode: "purge"
-            record_type: "TXT"
-            relative_name: "{{ item.key }}"
-            zone_name: "{{ sso_dns_domain }}"
-            records:
-              - entry: "{{ item.value[0] }}"
-          loop: "{{ query('dict', challenge_data_dns) }}"  
-        - acme_certificate:
-            account_key: "{{ letsencrypt_account_key_src }}"
-            acme_directory: "{{ letsencrypt_acme_directory }}"
-            acme_version: 2
-            challenge: "dns-01"
-            dest: "{{ letsencrypt_adfs_crt_src }}"
-            csr: "{{ letsencrypt_adfs_csr_src }}"
-            fullchain_dest: "{{ letsencrypt_adfs_fullchain_src }}"
-            chain_dest: "{{ letsencrypt_adfs_chain_src }}"
-            data: "{{ adfs_acme_cert_phase1 }}"
-        - shell: "openssl pkcs12 -export -out {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_pfx_src }} -inkey {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_key_src }} -in {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_crt_src }} -certfile {{ hostvars[inventory_hostname].playbook_dir }}/{{ letsencrypt_adfs_chain_src }} -passout pass:"
-      rescue:
-        - debug:
-            msg="Certificate already generated, skipping"
-      when: adfs_acme_cert_phase1.changed
-      tags:
-        - acme
-      
-    - name: Create security group that allows incoming traffic on SSH/HTTP/HTTPS/RDP/WINRM
-      azure_rm_securitygroup:
-        client_id: "{{ azure_client_id }}"
-        tenant: "{{ azure_tenant }}"
-        subscription_id: "{{ azure_subscription_id }}"
-        secret: "{{ azure_secret }}"
-        resource_group: "{{ res_group }}"
-        name: "ssosg"
-        rules:
-          - name: SSH
-            protocol: Tcp
-            destination_port_range: 22
-            access: Allow
-            priority: 101
-            direction: Inbound
-          - name: RDP
-            protocol: Tcp
-            destination_port_range: 3389
-            access: Allow
-            priority: 102
-            direction: Inbound
-          - name: HTTP
-            protocol: Tcp
-            destination_port_range: 80
-            access: Allow
-            priority: 103
-            direction: Inbound
-          - name: HTTPS
-            protocol: Tcp
-            destination_port_range: 443
-            access: Allow
-            priority: 104
-            direction: Inbound
-          - name: WINRM
-            protocol: Tcp
-            destination_port_range: 5985
-            access: Allow
-            priority: 105
-            direction: Inbound
-      tags:
-        - prep-network
+        - prep-certificate
     
     - name: Create Windows VM's
       include_tasks: create_windows_machine.yml
       with_items:
         - "ad" 
         - "adfs"
-       #- "winapp"
-
+      tags:
+        - create-windows-vm
+       
     - name: Create RHEL VM's
       include_tasks: create_rhel_machine.yml
       with_items:
         - "rhsso"
+      tags:
+        - create-rhel-vm
   
     - name: Refresh the inventory
       meta: refresh_inventory
@@ -446,8 +266,40 @@
 
 - name: Setup RHSSO
   hosts: "rhssovm"
+  vars:
+    ansible_ssh_private_key_file: "files/insecure"
+    ansible_user: "{{ username }}"
+    ansible_become: true
+    ansible_become_pass: "{{ password }}"
+    rhsm_activation_key: "developper_sub"
+    rhsm_org_id: "{{ lookup('env','RHN_ORG_ID') }}"
+    rhsm_repos:
+      - name: '*'
+        state: absent
+      - name: rhel-7-server-rpms
+        state: present
+      - name: rhel-7-server-extras-rpms
+        state: present
+      - name: jb-eap-7.1-for-rhel-7-server-rpms
+        state: present
+      - name: rh-sso-7.2-for-rhel-7-server-rpms
+        state: present
+      - name: jb-coreservices-1-for-rhel-7-server-rpms 
+        state: present
+
   pre_tasks:
-    - name: Update yum packages
+    - name: Subscribe the system to redhat
+      include_role:
+        name: redhat-subscription
+
+  tasks:
+    - name: Install RHSSO
       yum:
-        name: "*"
-        state: "latest"
+        name: "@rh-sso7"
+        state: latest
+
+    - name: Install jboss core services
+      yum:
+        name: "@jbcs-httpd24"
+
+    # service name: jbcs-httpd24-httpd.service
