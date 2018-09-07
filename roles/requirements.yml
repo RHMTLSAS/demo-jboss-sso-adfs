@@ -1,6 +1,6 @@
-#- src: https://github.com/sperreault/ansible-role-active-directory.git
-#   scm: git
-#   name: active-directory
+ - src: https://github.com/sperreault/ansible-role-active-directory.git
+   scm: git
+   name: active-directory
 
  - src: https://github.com/sperreault/ansible-role-redhat-subscription.git
    scm: git
