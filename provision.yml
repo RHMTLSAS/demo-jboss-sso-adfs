@@ -25,22 +25,7 @@
       include_tasks: standup_azure.yml
       tags:
         - standup-azure
-    - name: Create CNAME entry for enterpriseregistration
-      azure_rm_dnsrecordset:
-        client_id: "{{ azure_client_id }}"
-        tenant: "{{ azure_tenant }}"
-        subscription_id: "{{ azure_subscription_id }}"
-        secret: "{{ azure_secret }}"
-        resource_group: "{{ res_group }}"
-        record_mode: "purge"
-        record_type: "CNAME"
-        relative_name: "enterpriseregistration"
-        zone_name: "{{ sso_dns_domain }}"
-        records:
-          - entry: "adfs.{{ sso_dns_domain }}"
-      tags:
-        - standup-azure
-   
+
     - name: Create keys and csr
       shell: "{{ hostvars[inventory_hostname].playbook_dir }}/files/letsencrypt/gen_keys_csrs.sh chdir={{ hostvars[inventory_hostname].playbook_dir }}/files/letsencrypt"
       tags:
@@ -58,18 +43,18 @@
         - prep-certificate
         
     - name: Register certificates with let's encrypt
-      include_tasks: "{{ item }}"
-      with_items:
-        - "create_adfs_certificates.yml" 
+      include_tasks: "{{ include_file }}"
+      loop:
         - "create_rhsso_certificates.yml"
+      loop_control:
+        loop_var: "include_file"
       tags:
         - prep-certificate
     
     - name: Create Windows VM's
       include_tasks: create_windows_machine.yml
       with_items:
-        - "ad" 
-        - "adfs"
+        - "ad"
       tags:
         - create-windows-vm
        
@@ -113,15 +98,15 @@
         state: "present"
       loop: "{{ windows_users }}"
 
-    - name: Upload GSMA Setup powershell
-      win_template:
-          src: "advm/adfs_gsma_setup.ps1.j2" # required. Path of a Jinja2 formatted template on the local server. This can be a relative or absolute path.
-          dest: 'c:\adfs_gsma_setup.ps1' # required. Location to render the template to on the remote machine.
-          force: yes # not required. If C(yes), will replace the remote file when contents are different from the source.,If C(no), the file will only be transferred if the destination does not exist.
-      register: result_upload_gsma_setup_ps1
-    - name: Execute GSMA Setup powershell
-      win_shell:  'c:\adfs_gsma_setup.ps1'
-      when: result_upload_gsma_setup_ps1 is changed
+    # - name: Upload GSMA Setup powershell
+    #   win_template:
+    #       src: "advm/adfs_gsma_setup.ps1.j2" # required. Path of a Jinja2 formatted template on the local server. This can be a relative or absolute path.
+    #       dest: 'c:\adfs_gsma_setup.ps1' # required. Location to render the template to on the remote machine.
+    #       force: yes # not required. If C(yes), will replace the remote file when contents are different from the source.,If C(no), the file will only be transferred if the destination does not exist.
+    #   register: result_upload_gsma_setup_ps1
+    # - name: Execute GSMA Setup powershell
+    #   win_shell:  'c:\adfs_gsma_setup.ps1'
+    #   when: result_upload_gsma_setup_ps1 is changed
 
 # - name: Update the virtual network by using the advm
 #   hosts: localhost
@@ -148,8 +133,8 @@
 #         dns_servers: 
 #           - "192.168.33.10"
 
-- name: Setup ADFS
-  hosts: "adfsvm" 
+# - name: Setup ADFS
+#   hosts: "adfsvm" 
  
   # pre_tasks:
   #   - name: Renew dhcp to take advantage of the new dns
@@ -167,18 +152,18 @@
   #   - name: Reboot if required
   #     win_reboot:
   #     when: domain_state.reboot_required
-  tasks:
-    - name: Create working directories
-      win_file:
-          path: "{{ item }}" 
-          state: directory 
-      loop:
-          - "{{ adfs_base_directory }}"
+  # tasks:
+  #   - name: Create working directories
+  #     win_file:
+  #         path: "{{ item }}" 
+  #         state: directory 
+  #     loop:
+  #         - "{{ adfs_base_directory }}"
       
-    - name: Upload certificate
-      win_copy:
-          src: "{{ letsencrypt_adfs_pfx_src }}"
-          dest: "{{ letsencrypt_adfs_pfx_dest }}"
+  #   - name: Upload certificate
+  #     win_copy:
+  #         src: "{{ letsencrypt_adfs_pfx_src }}"
+  #         dest: "{{ letsencrypt_adfs_pfx_dest }}"
 
     # - name: Upload PowerShell modules
     #   win_copy:
@@ -193,76 +178,76 @@
     #       force: yes
 
 
-    - name: Install AD-Domain-Services feature
-      win_feature:
-        name: ADFS-Federation
-        include_management_tools: yes
-        include_sub_features: yes
-        state: present
+    # - name: Install AD-Domain-Services feature
+    #   win_feature:
+    #     name: ADFS-Federation
+    #     include_management_tools: yes
+    #     include_sub_features: yes
+    #     state: present
 
-    #
+    # #
     # TODO: Run the powershell for seting up adfs
 
-- name: Setup Win Web App
-  hosts: "winappvm"
-  pre_tasks:
-    # - name: Renew dhcp to take advantage of the new dns
-    #   win_command: "ipconfig /renew"
+# - name: Setup Win Web App
+#   hosts: "winappvm"
+#   pre_tasks:
+#     # - name: Renew dhcp to take advantage of the new dns
+#     #   win_command: "ipconfig /renew"
       
-    - name: Register machine to domain
-      win_domain_membership:
-        dns_domain_name: "{{ sso_dns_domain }}"
-        hostname: "{{ inventory_hostname }}"
-        domain_admin_user: "administrator@{{ sso_dns_domain }}"
-        domain_admin_password: "{{ password }}"
-        state: domain
-      register: domain_state
+#     - name: Register machine to domain
+#       win_domain_membership:
+#         dns_domain_name: "{{ sso_dns_domain }}"
+#         hostname: "{{ inventory_hostname }}"
+#         domain_admin_user: "administrator@{{ sso_dns_domain }}"
+#         domain_admin_password: "{{ password }}"
+#         state: domain
+#       register: domain_state
 
-    - name: Reboot if required
-      win_reboot:
-      when: domain_state.reboot_required
+#     - name: Reboot if required
+#       win_reboot:
+#       when: domain_state.reboot_required
 
-  tasks:
-    - name: install-iis
-      win_feature:
-        name: "Web-Server"
-        state: present
-        restart: no
-        include_sub_features: yes
-        include_management_tools: no
-      register: install_iis_result
+#   tasks:
+#     - name: install-iis
+#       win_feature:
+#         name: "Web-Server"
+#         state: present
+#         restart: no
+#         include_sub_features: yes
+#         include_management_tools: no
+#       register: install_iis_result
 
-    - name: Reboot if required
-      win_reboot:
-      when: install_iis_result.reboot_required
+#     - name: Reboot if required
+#       win_reboot:
+#       when: install_iis_result.reboot_required
 
-    - name: Create working directories
-      win_file:
-          path: "{{ item }}" 
-          state: directory 
-      loop:
-          - "{{ winapp_site_directory }}"
-          - "{{ winapp_dest }}"
+#     - name: Create working directories
+#       win_file:
+#           path: "{{ item }}" 
+#           state: directory 
+#       loop:
+#           - "{{ winapp_site_directory }}"
+#           - "{{ winapp_dest }}"
     
-    - name: Create winapp pool
-      win_iis_webapppool:
-        name: "{{ winapp_app_pool }}"
-        state: started
+#     - name: Create winapp pool
+#       win_iis_webapppool:
+#         name: "{{ winapp_app_pool }}"
+#         state: started
 
-    - name: winapp IIS site
-      win_iis_website:
-        name: "{{ winapp_site_name }}"
-        state: started
-        port: 80
-        hostname: "{{ winapp_site_hostname }}"
-        application_pool: "{{ winapp_app_pool }}"
-        physical_path: "{{ winapp_dest }}"
-        parameters: "logfile.directory:{{ winapp_site_directory }}\\logs"
-      register: website 
+#     - name: winapp IIS site
+#       win_iis_website:
+#         name: "{{ winapp_site_name }}"
+#         state: started
+#         port: 80
+#         hostname: "{{ winapp_site_hostname }}"
+#         application_pool: "{{ winapp_app_pool }}"
+#         physical_path: "{{ winapp_dest }}"
+#         parameters: "logfile.directory:{{ winapp_site_directory }}\\logs"
+#       register: website 
 
-    - name: lala
-      debug:
-        msg: "{{ website }}"
+#     - name: lala
+#       debug:
+#         msg: "{{ website }}"
 
 - name: Setup RHSSO
   hosts: "rhssovm"
@@ -271,7 +256,7 @@
     ansible_user: "{{ username }}"
     ansible_become: true
     ansible_become_pass: "{{ password }}"
-    rhsm_activation_key: "developper_sub"
+    rhsm_activation_key: "tests"
     rhsm_org_id: "{{ lookup('env','RHN_ORG_ID') }}"
     rhsm_repos:
       - name: '*'
@@ -284,22 +269,67 @@
         state: present
       - name: rh-sso-7.2-for-rhel-7-server-rpms
         state: present
-      - name: jb-coreservices-1-for-rhel-7-server-rpms 
-        state: present
 
-  pre_tasks:
-    - name: Subscribe the system to redhat
-      include_role:
-        name: redhat-subscription
+  roles:
+    - redhat-subscription
+    - rhsso 
 
   tasks:
-    - name: Install RHSSO
-      yum:
-        name: "@rh-sso7"
-        state: latest
+    - name: Install httpd
+      package:
+        name: "{{ item }}"
+        state: "latest"
+      loop:
+        - httpd
+        - mod_ssl
+      register: install_httpd
 
-    - name: Install jboss core services
-      yum:
-        name: "@jbcs-httpd24"
+    - name: Enable httpd
+      service:
+        name: "httpd"
+        state: "stopped"
+        enabled: yes
+      when: install_httpd.changed
 
-    # service name: jbcs-httpd24-httpd.service
+    - name: Upload ssl key
+      copy:
+          dest: "{{ letsencrypt_rhsso_key_dest }}"
+          src: "{{ letsencrypt_rhsso_key_src }}"
+          group: "apache"
+          mode: "0600"
+          owner: "apache"
+
+    - name: Upload ssl cert
+      copy:
+          dest: "{{ letsencrypt_rhsso_crt_dest }}"
+          src: "{{ letsencrypt_rhsso_crt_src }}"
+          group: "apache"
+          mode: "0600"
+          owner: "apache"
+
+    - name: Upload ssl chain cert
+      copy:
+          dest: "{{ letsencrypt_rhsso_chain_dest }}"
+          src: "{{ letsencrypt_rhsso_chain_src }}"
+          group: "apache"
+          mode: "0600"
+          owner: "apache"
+
+    - name: Copy template httpd file
+      template:
+        src: "rhsso/rhsso.conf.j2"
+        dest: "/etc/httpd/conf.d/rhsso.conf"
+
+    - name: Enable http and https on firewall
+      firewalld:
+        service: "{{ item }}"
+        permanent: true
+        state: enabled
+      loop:
+        - http
+        - https
+
+    - name: restart httpd
+      service:
+        name: httpd
+        state: restarted

@@ -50,7 +50,7 @@
     tags:
       - standup-azure
 
-  - name: Create 4 public ip adresses
+  - name: Create public ip adresses
     azure_rm_publicipaddress:
       client_id: "{{ azure_client_id }}"
       tenant: "{{ azure_tenant }}"
@@ -102,9 +102,6 @@
     tags:
       - standup-azure
 
-
-
-
   - name: Create security group that allows incoming traffic on SSH/HTTP/HTTPS/RDP/WINRM
     azure_rm_securitygroup:
       client_id: "{{ azure_client_id }}"
@@ -144,5 +141,5 @@
           access: Allow
           priority: 105
           direction: Inbound
-      tags:
-        - standup-azure
+    tags:
+      - standup-azure

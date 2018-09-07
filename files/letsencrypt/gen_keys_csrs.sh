@@ -23,11 +23,10 @@ function gen_dhparam
 
 # Generate the keys
 gen_key account.key
-gen_key adfs.key
-gen_key rhsso.key
+gen_key rhsso.sso.doogie.ca.key
 # Generate the dhparams
 gen_dhparam dhparams.out
 
-openssl req -new -sha256 -key adfs.key -subj "/" -reqexts SAN -config <(cat openssl.cnf <(printf "[SAN]\nsubjectAltName=DNS:adfs.sso.doogie.ca,DNS:enterpriseregistration.sso.doogie.ca")) > adfs.csr
-openssl req -new -sha256 -key rhsso.key -subj "/" -reqexts SAN -config <(cat openssl.cnf <(printf "[SAN]\nsubjectAltName=DNS:rhsso.sso.doogie.ca")) > rhsso.csr
+#openssl req -new -sha256 -key adfs.key -subj "/" -reqexts SAN -config <(cat openssl.cnf <(printf "[SAN]\nsubjectAltName=DNS:adfs.sso.doogie.ca,DNS:enterpriseregistration.sso.doogie.ca")) > adfs.csr
+openssl req -new -sha256 -key rhsso.sso.doogie.ca.key -subj "/" -reqexts SAN -config <(cat openssl.cnf <(printf "[SAN]\nsubjectAltName=DNS:rhsso.sso.doogie.ca")) > rhsso.sso.doogie.ca.csr
 

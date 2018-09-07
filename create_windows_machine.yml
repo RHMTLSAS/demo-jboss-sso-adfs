@@ -33,7 +33,7 @@
       resource_group: "{{ res_group }}"
       name: "{{ vm_name }}vm"
       os_type: "Windows"
-      vm_size: "{{ windows_vm_size }}"
+      vm_size: "{{ default_windows_vm_size }}" # TODO FIX
       storage_account: "ssolrs"
       storage_container: "vms"
       storage_blob: "{{vm_name}}vm.vhd"

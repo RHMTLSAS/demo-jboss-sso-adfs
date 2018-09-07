@@ -30,7 +30,7 @@
       secret: "{{ azure_secret }}"
       resource_group: "{{ res_group }}"
       name: "{{ vm_name }}vm"
-      vm_size: "{{ rhel_vm_size }}"
+      vm_size: "{{ default_rhel_vm_size }}" # TODO: Fix
       managed_disk_type: "{{ storage_class }}"
       storage_account: "ssolrs"
       storage_container: "vms"
