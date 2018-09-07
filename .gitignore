@@ -6,3 +6,5 @@ roles/*
 files/letsencrypt/*.key
 files/letsencrypt/*.crt
 files/letsencrypt/*.pfx
+files/letsencrypt/*.csr
+venv/*
