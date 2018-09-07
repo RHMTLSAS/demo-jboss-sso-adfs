@@ -11,7 +11,7 @@
     ansible_python_interpreter: "{{ lookup('env', 'PYTHON_EXEC')}}"
 
   pre_tasks:
-    - name: Do we have our Azure Credentials
+    - name: Do we have all the environment variables
       assert:
         { that: "{{ item}} != ''" }
       with_items:
@@ -19,6 +19,7 @@
         - azure_tenant
         - azure_subscription_id
         - azure_secret 
+        - ansible_python_interpreter
 
   tasks:
     - name: Standup Azure
@@ -273,6 +274,13 @@
   roles:
     - redhat-subscription
     - rhsso 
+
+  pre-tasks:
+    - name: Do we have all the environment variables
+      assert:
+        { that: "{{ item}} != ''" }
+      with_items:
+        - rhsm_org_id
 
   tasks:
     - name: Install httpd
