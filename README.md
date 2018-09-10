@@ -39,7 +39,7 @@ In both cases you need to setup the following environment variable:
   - AZURE_SECRET
   - PYTHON_EXEC
 
-If you are to use your own enviroment execute the following:
+If you are to use your own enviroment clone the repo and execute the following:
 ```
  make requirements
  ansible-playbook provision.yml
