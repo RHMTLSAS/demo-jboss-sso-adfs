@@ -1,5 +1,3 @@
-#ANSIBLE-VAULT = configs/shared/ansible_vault
-#ANSIBLE-PLAYBOOK = ansible-playbook --ask-vault-pass --vault-id $(ANSIBLE-VAULT)
 ANSIBLE-PLAYBOOK = ansible-playbook 
 
 
@@ -18,8 +16,17 @@ requirements:
 	ansible-galaxy install -r roles/requirements.yml -p ./roles/ --force
 
 .PHONY:
+venv:
+	virtualenv venv
+	(\
+		source venv/bin/activate; \
+		pip install -r requirements.txt; \
+	)		
+
+.PHONY:
 clean:
 	rm *.retry
+	rm -rf venv
 
 .PHONY:
 submodules:
