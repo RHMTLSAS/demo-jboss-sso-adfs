@@ -275,7 +275,7 @@
     - redhat-subscription
     - rhsso 
 
-  pre-tasks:
+  pre_tasks:
     - name: Do we have all the environment variables
       assert:
         { that: "{{ item}} != ''" }
